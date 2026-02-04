@@ -57,6 +57,29 @@ io.on('connection', (socket) => {
     updateRoomUsers(roomCode);
   });
 
+  // Handle leaving a room
+  socket.on('leave-room', (roomCode) => {
+    console.log(`Client ${socket.id} leaving room: ${roomCode}`);
+
+    // Leave the socket.io room
+    socket.leave(roomCode);
+
+    // Remove user from room tracking
+    if (rooms.has(roomCode)) {
+      const users = rooms.get(roomCode);
+      users.delete(socket.id);
+
+      // Clean up empty rooms
+      if (users.size === 0) {
+        rooms.delete(roomCode);
+        console.log(`Room ${roomCode} is empty and has been deleted`);
+      } else {
+        // Update remaining users in the room
+        updateRoomUsers(roomCode);
+      }
+    }
+  });
+
   // Handle message sending
   socket.on('send-message', ({ roomCode, message, timestamp }) => {
     console.log(`Message in room ${roomCode}:`, message);

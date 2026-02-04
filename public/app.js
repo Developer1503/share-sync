@@ -272,7 +272,7 @@ messageInput.addEventListener('keydown', (e) => {
 leaveRoomBtn.addEventListener('click', () => {
     if (currentRoom) {
         console.log('👋 Leaving room:', currentRoom);
-        socket.emit('join-room', ''); // Leave current room
+        socket.emit('leave-room', currentRoom); // Properly leave current room
         currentRoom = null;
     }
 
