@@ -1,6 +1,107 @@
-// Initialize Socket.io connection
-// When deployed, Socket.io will automatically connect to the same domain
-const socket = io();
+// Initialize Socket.io connection with robust configuration
+// Determine server URL - works both locally and in production
+const SERVER_URL = window.location.origin;
+
+// Connection configuration optimized for Vercel
+const socket = io(SERVER_URL, {
+    // Polling-first for better Vercel compatibility
+    transports: ['polling', 'websocket'],
+    // Reconnection settings
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 10,
+    // Timeout settings
+    timeout: 60000,
+    // Auto-connect
+    autoConnect: true,
+    // Query parameters for debugging
+    query: {
+        clientTime: Date.now()
+    }
+});
+
+// Connection state tracking
+let connectionAttempts = 0;
+let isConnected = false;
+let connectionStatusIndicator = null;
+
+// Create connection status indicator
+function createConnectionStatusIndicator() {
+    if (!connectionStatusIndicator) {
+        connectionStatusIndicator = document.createElement('div');
+        connectionStatusIndicator.id = 'connection-status';
+        connectionStatusIndicator.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    `;
+        document.body.appendChild(connectionStatusIndicator);
+    }
+    return connectionStatusIndicator;
+}
+
+// Update connection status UI
+function updateConnectionStatus(status, message) {
+    const indicator = createConnectionStatusIndicator();
+
+    const statusConfig = {
+        connecting: {
+            bg: '#FFA500',
+            color: '#ffffff',
+            icon: '🔄',
+            text: message || 'Connecting...'
+        },
+        connected: {
+            bg: '#10b981',
+            color: '#ffffff',
+            icon: '✓',
+            text: 'Connected'
+        },
+        disconnected: {
+            bg: '#ef4444',
+            color: '#ffffff',
+            icon: '✗',
+            text: message || 'Disconnected'
+        },
+        error: {
+            bg: '#ef4444',
+            color: '#ffffff',
+            icon: '⚠',
+            text: message || 'Connection Error'
+        }
+    };
+
+    const config = statusConfig[status];
+    if (config) {
+        indicator.style.backgroundColor = config.bg;
+        indicator.style.color = config.color;
+        indicator.innerHTML = `<span>${config.icon}</span><span>${config.text}</span>`;
+
+        // Auto-hide "connected" status after 3 seconds
+        if (status === 'connected') {
+            setTimeout(() => {
+                indicator.style.opacity = '0';
+                setTimeout(() => {
+                    indicator.style.display = 'none';
+                }, 300);
+            }, 3000);
+        } else {
+            indicator.style.opacity = '1';
+            indicator.style.display = 'flex';
+        }
+    }
+}
 
 // DOM Elements - Join Screen
 const joinScreen = document.getElementById('join-screen');
@@ -324,19 +425,82 @@ socket.on('room-users-update', (count) => {
 });
 
 socket.on('connect', () => {
+    isConnected = true;
+    connectionAttempts = 0;
     console.log('🔌 Connected to server with socket ID:', socket.id);
+    console.log('   Transport:', socket.io.engine.transport.name);
+    updateConnectionStatus('connected');
+
+    // If user was in a room, rejoin after reconnection
+    if (currentRoom) {
+        console.log('🔄 Rejoining room after reconnection:', currentRoom);
+        socket.emit('join-room', currentRoom);
+    }
 });
 
-socket.on('disconnect', () => {
-    console.log('🔌 Disconnected from server');
-    showToast('Disconnected from server');
+socket.on('disconnect', (reason) => {
+    isConnected = false;
+    console.log('🔌 Disconnected from server. Reason:', reason);
+    updateConnectionStatus('disconnected', 'Connection lost');
+    showToast('Disconnected from server. Reconnecting...');
+
+    // Don't immediately leave room - allow reconnection
+    if (currentRoom && reason === 'io server disconnect') {
+        // Server disconnected us - return to join screen after delay
+        setTimeout(() => {
+            if (!isConnected) {
+                showScreen(joinScreen);
+                currentRoom = null;
+            }
+        }, 5000);
+    }
+});
+
+// Handle connection errors
+socket.on('connect_error', (error) => {
+    connectionAttempts++;
+    console.error('❌ Connection error:', error.message);
+    console.log('   Attempt:', connectionAttempts);
+    updateConnectionStatus('error', `Connection error (attempt ${connectionAttempts})`);
+
+    if (connectionAttempts > 5) {
+        showToast('⚠ Connection issues. Please check your internet.');
+    }
+});
+
+// Handle reconnection attempts
+socket.on('reconnect_attempt', (attemptNumber) => {
+    console.log('🔄 Reconnection attempt:', attemptNumber);
+    updateConnectionStatus('connecting', `Reconnecting (${attemptNumber})...`);
+});
+
+// Handle successful reconnection
+socket.on('reconnect', (attemptNumber) => {
+    console.log('✅ Reconnected after', attemptNumber, 'attempts');
+    connectionAttempts = 0;
+    isConnected = true;
+    updateConnectionStatus('connected', 'Reconnected!');
+    showToast('✓ Reconnected to server');
+});
+
+// Handle reconnection failure
+socket.on('reconnect_failed', () => {
+    console.error('❌ Reconnection failed');
+    updateConnectionStatus('error', 'Cannot connect to server');
+    showToast('✗ Cannot connect to server. Please refresh the page.');
+
     if (currentRoom) {
         setTimeout(() => {
             showScreen(joinScreen);
             currentRoom = null;
-        }, 2000);
+        }, 3000);
     }
 });
 
 // Initial focus - create tab is active by default
 console.log('🎯 ShareSync loaded. Open browser console to see debug logs.');
+console.log('🌐 Server URL:', SERVER_URL);
+console.log('🔧 Socket.IO Transports:', socket.io.opts.transports);
+
+// Show initial connection status
+updateConnectionStatus('connecting', 'Connecting to server...');

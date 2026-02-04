@@ -6,16 +6,28 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io with CORS configuration for production
+// Socket.io with CORS configuration optimized for Vercel
 const io = socketIO(server, {
   cors: {
     origin: "*", // Allow all origins (you can restrict this to your domain)
     methods: ["GET", "POST"],
-    credentials: true
+    credentials: true,
+    allowedHeaders: ["*"]
   },
-  transports: ['websocket', 'polling'], // Support both for reliability
-  pingTimeout: 60000,
-  pingInterval: 25000
+  // Polling-first for better Vercel serverless compatibility
+  transports: ['polling', 'websocket'],
+  // Extended timeouts for serverless environment
+  pingTimeout: 120000,    // 2 minutes
+  pingInterval: 45000,    // 45 seconds
+  // Additional serverless optimizations
+  connectTimeout: 60000,  // 1 minute connection timeout
+  upgradeTimeout: 30000,  // 30 seconds upgrade timeout
+  maxHttpBufferSize: 1e6, // 1MB
+  allowEIO3: true,        // Backward compatibility
+  // Connection handling
+  allowUpgrades: true,
+  perMessageDeflate: false, // Disable compression for faster responses
+  httpCompression: true
 });
 
 const PORT = process.env.PORT || 3000;
@@ -28,7 +40,9 @@ const rooms = new Map();
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
+  console.log('🔌 New client connected:', socket.id);
+  console.log('   Transport:', socket.conn.transport.name);
+  console.log('   Connected at:', new Date().toISOString());
 
   // Handle room joining
   socket.on('join-room', (roomCode) => {
