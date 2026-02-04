@@ -1,18 +1,20 @@
 // Initialize Socket.io connection with robust configuration
-// Determine server URL - works both locally and in production
-const SERVER_URL = window.location.origin;
+// Backend URL - Update this after deploying to Render
+const BACKEND_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:3000'  // Local development
+    : 'https://sharesync-backend.onrender.com'; // Production backend on Render (UPDATE THIS!)
 
-// Connection configuration optimized for Vercel
-const socket = io(SERVER_URL, {
-    // Polling-first for better Vercel compatibility
-    transports: ['polling', 'websocket'],
+// Connection configuration optimized for persistent server
+const socket = io(BACKEND_URL, {
+    // WebSocket-first for better performance on persistent servers
+    transports: ['websocket', 'polling'],
     // Reconnection settings
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 10,
     // Timeout settings
-    timeout: 60000,
+    timeout: 20000,
     // Auto-connect
     autoConnect: true,
     // Query parameters for debugging
@@ -499,7 +501,7 @@ socket.on('reconnect_failed', () => {
 
 // Initial focus - create tab is active by default
 console.log('🎯 ShareSync loaded. Open browser console to see debug logs.');
-console.log('🌐 Server URL:', SERVER_URL);
+console.log('🌐 Backend URL:', BACKEND_URL);
 console.log('🔧 Socket.IO Transports:', socket.io.opts.transports);
 
 // Show initial connection status

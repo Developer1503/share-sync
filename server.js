@@ -6,28 +6,18 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io with CORS configuration optimized for Vercel
+// Socket.io with CORS configuration for production
 const io = socketIO(server, {
   cors: {
-    origin: "*", // Allow all origins (you can restrict this to your domain)
+    origin: "*", // Allow requests from any origin (restrict to your frontend domain in production)
     methods: ["GET", "POST"],
-    credentials: true,
-    allowedHeaders: ["*"]
+    credentials: true
   },
-  // Polling-first for better Vercel serverless compatibility
-  transports: ['polling', 'websocket'],
-  // Extended timeouts for serverless environment
-  pingTimeout: 120000,    // 2 minutes
-  pingInterval: 45000,    // 45 seconds
-  // Additional serverless optimizations
-  connectTimeout: 60000,  // 1 minute connection timeout
-  upgradeTimeout: 30000,  // 30 seconds upgrade timeout
-  maxHttpBufferSize: 1e6, // 1MB
-  allowEIO3: true,        // Backward compatibility
-  // Connection handling
-  allowUpgrades: true,
-  perMessageDeflate: false, // Disable compression for faster responses
-  httpCompression: true
+  // WebSocket-first for persistent server deployment
+  transports: ['websocket', 'polling'],
+  // Standard timeouts (works great on persistent servers)
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 const PORT = process.env.PORT || 3000;
