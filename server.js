@@ -5,7 +5,18 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+
+// Socket.io with CORS configuration for production
+const io = socketIO(server, {
+  cors: {
+    origin: "*", // Allow all origins (you can restrict this to your domain)
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'], // Support both for reliability
+  pingTimeout: 60000,
+  pingInterval: 25000
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -30,7 +41,7 @@ io.on('connection', (socket) => {
 
     // Join the new room
     socket.join(roomCode);
-    
+
     // Track room users
     if (!rooms.has(roomCode)) {
       rooms.set(roomCode, new Set());
@@ -38,10 +49,10 @@ io.on('connection', (socket) => {
     rooms.get(roomCode).add(socket.id);
 
     console.log(`Client ${socket.id} joined room: ${roomCode}`);
-    
+
     // Notify client of successful join
     socket.emit('room-joined', roomCode);
-    
+
     // Notify room of user count update
     updateRoomUsers(roomCode);
   });
@@ -49,7 +60,7 @@ io.on('connection', (socket) => {
   // Handle message sending
   socket.on('send-message', ({ roomCode, message, timestamp }) => {
     console.log(`Message in room ${roomCode}:`, message);
-    
+
     // Broadcast message to everyone in the room including sender
     io.to(roomCode).emit('receive-message', {
       message,
@@ -61,12 +72,12 @@ io.on('connection', (socket) => {
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    
+
     // Remove user from all rooms and clean up empty rooms
     rooms.forEach((users, roomCode) => {
       if (users.has(socket.id)) {
         users.delete(socket.id);
-        
+
         if (users.size === 0) {
           rooms.delete(roomCode);
           console.log(`Room ${roomCode} is empty and has been deleted`);

@@ -1,4 +1,5 @@
 // Initialize Socket.io connection
+// When deployed, Socket.io will automatically connect to the same domain
 const socket = io();
 
 // DOM Elements - Join Screen
