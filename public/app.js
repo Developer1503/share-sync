@@ -1,6 +1,6 @@
 // Initialize Socket.io connection with robust configuration
 // Backend URL - Update this after deploying to Render
-const BACKEND_URL = window.location.hostname === 'localhost'
+const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.protocol === 'file:')
     ? 'http://localhost:3000'  // Local development
     : 'https://sharesync-backend.onrender.com'; // Production backend on Render (UPDATE THIS!)
 
