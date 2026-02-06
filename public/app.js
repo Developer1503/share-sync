@@ -1,8 +1,8 @@
 // Initialize Socket.io connection
-// Connect to same server (works for both local and Vercel deployment)
+// Connect to Render backend in production, localhost in development
 const BACKEND_URL = window.location.protocol === 'file:'
     ? 'http://localhost:3000'  // Local file opening
-    : window.location.origin;   // Same server (localhost or Vercel URL)
+    : 'https://share-sync.onrender.com';   // Production backend on Render
 
 // Connection configuration optimized for persistent server
 const socket = io(BACKEND_URL, {
