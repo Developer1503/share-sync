@@ -202,31 +202,47 @@ function generateRoomCode() {
 // Generate QR Code for room
 let qrCodeInstance = null;
 function generateQRCode(roomCode) {
+    console.log('🔲 Generating QR code for room:', roomCode);
+
     const canvas = document.getElementById('qr-code-canvas');
+
+    if (!canvas) {
+        console.error('❌ QR code canvas element not found!');
+        return;
+    }
+
+    // Check if QRCode library is loaded
+    if (typeof QRCode === 'undefined') {
+        console.error('❌ QRCode library not loaded!');
+        canvas.innerHTML = '<p style="color: red; padding: 2rem;">QR Code library failed to load</p>';
+        return;
+    }
 
     // Clear previous QR code
     canvas.innerHTML = '';
 
-    // Create URL to join room (you can customize this)
-    const roomURL = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+    // Create URL to join room
+    const baseURL = window.location.hostname === 'localhost'
+        ? `http://localhost:${window.location.port || 3000}`
+        : window.location.origin;
+    const roomURL = `${baseURL}${window.location.pathname}?room=${roomCode}`;
+
+    console.log('📱 QR Code URL:', roomURL);
 
     // Generate QR code
     try {
-        if (qrCodeInstance) {
-            qrCodeInstance.clear();
-            qrCodeInstance.makeCode(roomURL);
-        } else {
-            qrCodeInstance = new QRCode(canvas, {
-                text: roomURL,
-                width: 200,
-                height: 200,
-                colorDark: "#7c3aed",  // Primary purple color
-                colorLight: "#1a1625", // Dark background
-                correctLevel: QRCode.CorrectLevel.H
-            });
-        }
+        qrCodeInstance = new QRCode(canvas, {
+            text: roomURL,
+            width: 180,
+            height: 180,
+            colorDark: "#7c3aed",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        });
+        console.log('✅ QR code generated successfully!');
     } catch (error) {
-        console.error('QR Code generation failed:', error);
+        console.error('❌ QR Code generation failed:', error);
+        canvas.innerHTML = '<p style="color: red; padding: 1rem; font-size: 0.875rem;">Failed to generate QR code</p>';
     }
 }
 
