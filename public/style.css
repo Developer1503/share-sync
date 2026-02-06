@@ -375,10 +375,15 @@ button:active {
 }
 
 #qr-code-canvas {
-  padding: 1rem;
+  padding: 0.75rem;
   background: white;
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 16px rgba(124, 58, 237, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  min-width: 200px;
 }
 
 #qr-code-canvas img {
