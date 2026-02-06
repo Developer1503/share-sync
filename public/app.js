@@ -225,38 +225,49 @@ async function copyToClipboard(text) {
     }
 }
 
-// Add message to UI
+// Add message to UI (Replaces current message)
 function addMessage(message, timestamp) {
-    // Remove empty state if it exists
-    const emptyState = messagesContainer.querySelector('.empty-state');
-    if (emptyState) {
-        emptyState.remove();
-    }
+    // Clear container completely to only show ONE item
+    messagesContainer.innerHTML = '';
 
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'message';
+    messageDiv.className = 'message active-display';
+
+    // Detect if it's a link
+    const isUrl = /^(https?:\/\/[^\s]+)$/i.test(message.trim());
+
+    let contentHtml = `<div class="message-text">${escapeHtml(message)}</div>`;
+
+    if (isUrl) {
+        contentHtml = `
+            <div class="link-preview">
+                <div class="link-icon">🔗</div>
+                <a href="${escapeHtml(message)}" target="_blank" class="shared-link">${escapeHtml(message)}</a>
+                <p class="link-hint">Click to open link in new tab</p>
+            </div>
+        `;
+    }
 
     messageDiv.innerHTML = `
     <div class="message-content">
-      <div class="message-text">${escapeHtml(message)}</div>
+      ${contentHtml}
       <div class="message-footer">
-        <span class="message-time">${formatTime(timestamp)}</span>
+        <span class="message-time">Last updated: ${formatTime(timestamp)}</span>
         <button class="btn-copy" onclick="copyMessage(this)">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
             <path d="M5 15H4C3.46957 15 2.96086 14.7893 2.58579 14.4142C2.21071 14.0391 2 13.5304 2 13V4C2 3.46957 2.21071 2.96086 2.58579 2.58579C2.96086 2.21071 3.46957 2 4 2H13C13.5304 2 14.0391 2.21071 14.4142 2.58579C14.7893 2.96086 15 3.46957 15 4V5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Copy
+          Copy Content
         </button>
       </div>
     </div>
   `;
 
     messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// Escape HTML to prevent XSS
+// Escape HTML
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -406,13 +417,17 @@ leaveRoomBtn.addEventListener('click', () => {
 });
 
 // Socket event listeners
-socket.on('room-joined', (roomCode) => {
+socket.on('room-joined', ({ roomCode, currentData }) => {
     console.log('✅ Successfully joined room:', roomCode);
-    console.log('⚠️ SHARE THIS CODE WITH OTHERS TO JOIN:', roomCode);
     currentRoomCode.textContent = roomCode;
     showScreen(chatScreen);
     messageInput.focus();
     showToast('✓ Joined room: ' + roomCode);
+
+    // If there's already data in the room, show it
+    if (currentData) {
+        addMessage(currentData.message, currentData.timestamp);
+    }
 });
 
 socket.on('receive-message', ({ message, timestamp, socketId }) => {

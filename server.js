@@ -46,16 +46,24 @@ io.on('connection', (socket) => {
     // Join the new room
     socket.join(roomCode);
 
-    // Track room users
+    // Track room users and current data
     if (!rooms.has(roomCode)) {
-      rooms.set(roomCode, new Set());
+      rooms.set(roomCode, {
+        users: new Set(),
+        currentData: null
+      });
     }
-    rooms.get(roomCode).add(socket.id);
+
+    const room = rooms.get(roomCode);
+    room.users.add(socket.id);
 
     console.log(`Client ${socket.id} joined room: ${roomCode}`);
 
-    // Notify client of successful join
-    socket.emit('room-joined', roomCode);
+    // Notify client of successful join and send current data
+    socket.emit('room-joined', {
+      roomCode,
+      currentData: room.currentData
+    });
 
     // Notify room of user count update
     updateRoomUsers(roomCode);
@@ -70,11 +78,11 @@ io.on('connection', (socket) => {
 
     // Remove user from room tracking
     if (rooms.has(roomCode)) {
-      const users = rooms.get(roomCode);
-      users.delete(socket.id);
+      const room = rooms.get(roomCode);
+      room.users.delete(socket.id);
 
       // Clean up empty rooms
-      if (users.size === 0) {
+      if (room.users.size === 0) {
         rooms.delete(roomCode);
         console.log(`Room ${roomCode} is empty and has been deleted`);
       } else {
@@ -84,11 +92,15 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle message sending
+  // Handle message sending (Updates the one active link/text)
   socket.on('send-message', ({ roomCode, message, timestamp }) => {
-    console.log(`Message in room ${roomCode}:`, message);
+    console.log(`Update in room ${roomCode}:`, message);
 
-    // Broadcast message to everyone in the room including sender
+    if (rooms.has(roomCode)) {
+      rooms.get(roomCode).currentData = { message, timestamp };
+    }
+
+    // Broadcast update to everyone
     io.to(roomCode).emit('receive-message', {
       message,
       timestamp,
@@ -101,11 +113,11 @@ io.on('connection', (socket) => {
     console.log('Client disconnected:', socket.id);
 
     // Remove user from all rooms and clean up empty rooms
-    rooms.forEach((users, roomCode) => {
-      if (users.has(socket.id)) {
-        users.delete(socket.id);
+    rooms.forEach((room, roomCode) => {
+      if (room.users.has(socket.id)) {
+        room.users.delete(socket.id);
 
-        if (users.size === 0) {
+        if (room.users.size === 0) {
           rooms.delete(roomCode);
           console.log(`Room ${roomCode} is empty and has been deleted`);
         } else {
@@ -118,9 +130,9 @@ io.on('connection', (socket) => {
 
 // Helper function to update room user count
 function updateRoomUsers(roomCode) {
-  const users = rooms.get(roomCode);
-  if (users) {
-    io.to(roomCode).emit('room-users-update', users.size);
+  const room = rooms.get(roomCode);
+  if (room) {
+    io.to(roomCode).emit('room-users-update', room.users.size);
   }
 }
 
