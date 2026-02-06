@@ -132,6 +132,25 @@ const tabContents = document.querySelectorAll('.tab-content');
 let currentRoom = null;
 let generatedCode = null;
 
+// Check URL for room parameter (QR code scanned)
+const urlParams = new URLSearchParams(window.location.search);
+const roomFromURL = urlParams.get('room');
+if (roomFromURL) {
+    // Auto-fill the room code input and switch to join tab
+    roomCodeInput.value = roomFromURL.toUpperCase();
+
+    // Switch to join tab
+    tabBtns.forEach(b => b.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="join"]').classList.add('active');
+    document.getElementById('join-tab').classList.add('active');
+
+    // Auto-join after a moment
+    setTimeout(() => {
+        joinRoomBtn.click();
+    }, 500);
+}
+
 // Tab Switching
 tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -178,6 +197,37 @@ function generateRoomCode() {
         code += characters.charAt(Math.floor(Math.random() * characters.length));
     }
     return code;
+}
+
+// Generate QR Code for room
+let qrCodeInstance = null;
+function generateQRCode(roomCode) {
+    const canvas = document.getElementById('qr-code-canvas');
+
+    // Clear previous QR code
+    canvas.innerHTML = '';
+
+    // Create URL to join room (you can customize this)
+    const roomURL = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+
+    // Generate QR code
+    try {
+        if (qrCodeInstance) {
+            qrCodeInstance.clear();
+            qrCodeInstance.makeCode(roomURL);
+        } else {
+            qrCodeInstance = new QRCode(canvas, {
+                text: roomURL,
+                width: 200,
+                height: 200,
+                colorDark: "#7c3aed",  // Primary purple color
+                colorLight: "#1a1625", // Dark background
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+    } catch (error) {
+        console.error('QR Code generation failed:', error);
+    }
 }
 
 // Show toast notification
@@ -293,6 +343,9 @@ createRoomBtn.addEventListener('click', () => {
         generatedCode = generateRoomCode();
         generatedCodeDisplay.textContent = generatedCode;
         generatedCodeContainer.style.display = 'block';
+
+        // Generate QR Code
+        generateQRCode(generatedCode);
 
         // Update button to "Join This Room"
         createRoomBtn.innerHTML = `

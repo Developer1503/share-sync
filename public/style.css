@@ -360,6 +360,41 @@ button:active {
   line-height: 1.6;
 }
 
+/* QR Code Container */
+.qr-code-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin: 1.5rem 0;
+  animation: slideDown 0.3s ease;
+}
+
+#qr-code-canvas {
+  padding: 1rem;
+  background: white;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.2);
+}
+
+#qr-code-canvas img {
+  display: block;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
+.qr-hint {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  text-align: center;
+  margin: 0;
+  font-weight: 500;
+}
+
 /* Chat Container */
 .chat-container {
   background: var(--bg-card);
