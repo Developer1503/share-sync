@@ -400,6 +400,13 @@ button:active {
   font-weight: 500;
 }
 
+/* Hide QR code on mobile/tablet (can't scan your own screen!) */
+@media (max-width: 768px) {
+  .qr-code-container {
+    display: none;
+  }
+}
+
 /* Chat Container */
 .chat-container {
   background: var(--bg-card);
