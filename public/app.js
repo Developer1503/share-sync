@@ -122,7 +122,10 @@ const userCount = document.getElementById('user-count');
 const messagesContainer = document.getElementById('messages-container');
 const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
+const attachBtn = document.getElementById('attach-btn');
+const fileInput = document.getElementById('file-input');
 const toast = document.getElementById('toast');
+
 
 // Tab elements
 const tabBtns = document.querySelectorAll('.tab-btn');
@@ -292,26 +295,55 @@ async function copyToClipboard(text) {
 }
 
 // Add message to UI (Replaces current message)
-function addMessage(message, timestamp) {
+function addMessage(message, timestamp, fileData = null) {
     // Clear container completely to only show ONE item
     messagesContainer.innerHTML = '';
 
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message active-display';
 
-    // Detect if it's a link
-    const isUrl = /^(https?:\/\/[^\s]+)$/i.test(message.trim());
+    let contentHtml = '';
 
-    let contentHtml = `<div class="message-text">${escapeHtml(message)}</div>`;
+    // Handle file attachment
+    if (fileData) {
+        const fileIcon = getFileIcon(fileData.type);
+        const isImage = fileData.type.startsWith('image/');
 
-    if (isUrl) {
         contentHtml = `
-            <div class="link-preview">
-                <div class="link-icon">🔗</div>
-                <a href="${escapeHtml(message)}" target="_blank" class="shared-link">${escapeHtml(message)}</a>
-                <p class="link-hint">Click to open link in new tab</p>
+            <div class="file-attachment">
+                <div class="file-icon">${fileIcon}</div>
+                <div class="file-info">
+                    <div class="file-name">${escapeHtml(fileData.name)}</div>
+                    <div class="file-meta">${formatFileSize(fileData.size)} • ${fileData.type}</div>
+                    ${isImage ? `
+                        <div class="file-preview">
+                            <img src="${fileData.data}" alt="${escapeHtml(fileData.name)}">
+                        </div>
+                    ` : ''}
+                    <a href="${fileData.data}" download="${escapeHtml(fileData.name)}" class="btn-download">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Download File
+                    </a>
+                </div>
             </div>
         `;
+    } else {
+        // Detect if it's a link
+        const isUrl = /^(https?:\/\/[^\s]+)$/i.test(message.trim());
+
+        if (isUrl) {
+            contentHtml = `
+                <div class="link-preview">
+                    <div class="link-icon">🔗</div>
+                    <a href="${escapeHtml(message)}" target="_blank" class="shared-link">${escapeHtml(message)}</a>
+                    <p class="link-hint">Click to open link in new tab</p>
+                </div>
+            `;
+        } else {
+            contentHtml = `<div class="message-text">${escapeHtml(message)}</div>`;
+        }
     }
 
     messageDiv.innerHTML = `
@@ -319,6 +351,7 @@ function addMessage(message, timestamp) {
       ${contentHtml}
       <div class="message-footer">
         <span class="message-time">Last updated: ${formatTime(timestamp)}</span>
+        ${!fileData ? `
         <button class="btn-copy" onclick="copyMessage(this)">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
@@ -326,12 +359,14 @@ function addMessage(message, timestamp) {
           </svg>
           Copy Content
         </button>
+        ` : ''}
       </div>
     </div>
   `;
 
     messagesContainer.appendChild(messageDiv);
 }
+
 
 // Escape HTML
 function escapeHtml(text) {
@@ -345,6 +380,30 @@ window.copyMessage = function (button) {
     const messageText = button.closest('.message-content').querySelector('.message-text').textContent;
     copyToClipboard(messageText);
 };
+
+// Get file icon based on file type
+function getFileIcon(fileType) {
+    if (fileType.startsWith('image/')) return '🖼️';
+    if (fileType.startsWith('video/')) return '🎥';
+    if (fileType.startsWith('audio/')) return '🎵';
+    if (fileType.includes('pdf')) return '📄';
+    if (fileType.includes('zip') || fileType.includes('rar') || fileType.includes('7z')) return '📦';
+    if (fileType.includes('word') || fileType.includes('doc')) return '📝';
+    if (fileType.includes('excel') || fileType.includes('sheet')) return '📊';
+    if (fileType.includes('powerpoint') || fileType.includes('presentation')) return '📽️';
+    if (fileType.includes('text')) return '📃';
+    return '📎';
+}
+
+// Format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
 
 // Auto-resize textarea
 messageInput.addEventListener('input', function () {
@@ -451,6 +510,69 @@ messageInput.addEventListener('keydown', (e) => {
     }
 });
 
+// File attachment handling
+attachBtn.addEventListener('click', () => {
+    fileInput.click();
+});
+
+fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+        showToast('⚠ File too large. Maximum size is 10MB');
+        fileInput.value = '';
+        return;
+    }
+
+    if (!currentRoom) {
+        showToast('Not connected to a room');
+        fileInput.value = '';
+        return;
+    }
+
+    try {
+        showToast('📤 Uploading file...');
+
+        // Read file as base64
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            const fileData = {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                data: event.target.result
+            };
+
+            const timestamp = Date.now();
+
+            console.log('📤 Sending file to room:', currentRoom, '| File:', file.name);
+
+            socket.emit('send-file', {
+                roomCode: currentRoom,
+                fileData: fileData,
+                timestamp: timestamp
+            });
+
+            fileInput.value = '';
+        };
+
+        reader.onerror = function () {
+            showToast('✗ Failed to read file');
+            fileInput.value = '';
+        };
+
+        reader.readAsDataURL(file);
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        showToast('✗ Failed to upload file');
+        fileInput.value = '';
+    }
+});
+
+
 // Leave room
 leaveRoomBtn.addEventListener('click', () => {
     if (currentRoom) {
@@ -495,14 +617,26 @@ socket.on('room-joined', ({ roomCode, currentData }) => {
 
     // If there's already data in the room, show it
     if (currentData) {
-        addMessage(currentData.message, currentData.timestamp);
+        if (currentData.fileData) {
+            addMessage('', currentData.timestamp, currentData.fileData);
+        } else {
+            addMessage(currentData.message, currentData.timestamp);
+        }
     }
 });
+
 
 socket.on('receive-message', ({ message, timestamp, socketId }) => {
     console.log('📨 Received message from socket', socketId, ':', message);
     addMessage(message, timestamp);
 });
+
+socket.on('receive-file', ({ fileData, timestamp, socketId }) => {
+    console.log('📨 Received file from socket', socketId, ':', fileData.name);
+    addMessage('', timestamp, fileData);
+    showToast('📥 File received: ' + fileData.name);
+});
+
 
 socket.on('room-users-update', (count) => {
     console.log('👥 Room users updated. Total devices:', count);

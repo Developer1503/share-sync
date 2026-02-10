@@ -643,6 +643,26 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
+.btn-attach {
+  padding: 0.875rem;
+  background: var(--bg-tertiary);
+  border: 1.5px solid var(--border);
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+
+.btn-attach:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.btn-attach svg {
+  width: 20px;
+  height: 20px;
+}
+
 .btn-send {
   padding: 0.875rem 1.5rem;
   background: linear-gradient(135deg, var(--primary), var(--secondary));
@@ -820,4 +840,78 @@ textarea::placeholder {
   padding: 0.75rem 1.5rem;
   font-size: 0.875rem;
   background: var(--bg-secondary);
+}
+
+/* File Attachment Styles */
+.file-attachment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+}
+
+.file-icon {
+  font-size: 3rem;
+  filter: drop-shadow(0 0 10px var(--secondary));
+  animation: float 3s ease-in-out infinite;
+}
+
+.file-info {
+  text-align: center;
+  width: 100%;
+}
+
+.file-name {
+  color: var(--primary-light);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  word-break: break-all;
+}
+
+.file-meta {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.file-preview {
+  margin: 1rem 0;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.file-preview img {
+  max-width: 100%;
+  max-height: 400px;
+  display: block;
+  margin: 0 auto;
+  border-radius: var(--radius-sm);
+}
+
+.btn-download {
+  padding: 0.875rem 1.5rem;
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  color: white;
+  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+  transition: var(--transition);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-download:hover {
+  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-download svg {
+  width: 18px;
+  height: 18px;
 }

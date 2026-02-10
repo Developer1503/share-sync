@@ -108,6 +108,23 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Handle file sending
+  socket.on('send-file', ({ roomCode, fileData, timestamp }) => {
+    console.log(`File upload in room ${roomCode}:`, fileData.name, `(${fileData.size} bytes)`);
+
+    if (rooms.has(roomCode)) {
+      rooms.get(roomCode).currentData = { fileData, timestamp };
+    }
+
+    // Broadcast file to everyone in the room
+    io.to(roomCode).emit('receive-file', {
+      fileData,
+      timestamp,
+      socketId: socket.id
+    });
+  });
+
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
