@@ -2,6 +2,13 @@ const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const path = require('path');
+const multer = require('multer');
+
+// Configure multer for memory storage and up to 100MB limit
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 }
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +31,7 @@ const PORT = process.env.PORT || 3000;
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json({limit: '10mb'}));
 
 // In-memory storage for rooms
 const rooms = new Map();
@@ -50,7 +58,7 @@ io.on('connection', (socket) => {
     if (!rooms.has(roomCode)) {
       rooms.set(roomCode, {
         users: new Set(),
-        currentData: null
+        messages: [] // Store history in memory for the room
       });
     }
 
@@ -59,10 +67,10 @@ io.on('connection', (socket) => {
 
     console.log(`Client ${socket.id} joined room: ${roomCode}`);
 
-    // Notify client of successful join and send current data
+    // Notify client of successful join and send message history
     socket.emit('room-joined', {
       roomCode,
-      currentData: room.currentData
+      messages: room.messages
     });
 
     // Notify room of user count update
@@ -92,34 +100,39 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle message sending (Updates the one active link/text)
+  // Handle message sending
   socket.on('send-message', ({ roomCode, message, timestamp }) => {
-    console.log(`Update in room ${roomCode}:`, message);
+    console.log(`Message in room ${roomCode}:`, message);
 
+    const msgObj = { type: 'text', message, timestamp };
     if (rooms.has(roomCode)) {
-      rooms.get(roomCode).currentData = { message, timestamp };
+      rooms.get(roomCode).messages.push(msgObj);
+      // Optional: limit history size per room to prevent memory leaks
+      if (rooms.get(roomCode).messages.length > 100) {
+        rooms.get(roomCode).messages.shift();
+      }
     }
 
     // Broadcast update to everyone
     io.to(roomCode).emit('receive-message', {
-      message,
-      timestamp,
+      ...msgObj,
       socketId: socket.id
     });
   });
 
-  // Handle file sending
-  socket.on('send-file', ({ roomCode, fileData, timestamp }) => {
-    console.log(`File upload in room ${roomCode}:`, fileData.name, `(${fileData.size} bytes)`);
-
+  // Handle file metadata sending (actual file sent via HTTP)
+  socket.on('send-file-metadata', ({ roomCode, fileData, timestamp }) => {
+    const msgObj = { type: 'file', fileData, timestamp };
     if (rooms.has(roomCode)) {
-      rooms.get(roomCode).currentData = { fileData, timestamp };
+      rooms.get(roomCode).messages.push(msgObj);
+      if (rooms.get(roomCode).messages.length > 100) {
+        // Here we could also delete the actual file buffers if they are tracked separately
+        rooms.get(roomCode).messages.shift();
+      }
     }
 
-    // Broadcast file to everyone in the room
     io.to(roomCode).emit('receive-file', {
-      fileData,
-      timestamp,
+      ...msgObj,
       socketId: socket.id
     });
   });
@@ -143,6 +156,53 @@ io.on('connection', (socket) => {
       }
     });
   });
+});
+
+// HTTP endpoints for large file uploads
+// Map of fileId -> { buffer, name, type, size, roomCode }
+const filesStorage = new Map();
+
+app.post('/upload', upload.array('files'), (req, res) => {
+  const roomCode = req.body.roomCode;
+  if (!roomCode || !rooms.has(roomCode)) {
+    return res.status(400).json({ error: 'Invalid room' });
+  }
+
+  const uploadedFiles = [];
+
+  req.files.forEach(file => {
+    const fileId = Math.random().toString(36).substring(2, 15);
+    filesStorage.set(fileId, {
+      buffer: file.buffer,
+      name: file.originalname,
+      type: file.mimetype,
+      size: file.size,
+      roomCode: roomCode
+    });
+
+    // Notify connected clients about this file via websocket or let frontend do it
+    uploadedFiles.push({
+      fileId,
+      name: file.originalname,
+      type: file.mimetype,
+      size: file.size
+    });
+  });
+
+  res.json({ success: true, files: uploadedFiles });
+});
+
+app.get('/download/:fileId', (req, res) => {
+  const fileId = req.params.fileId;
+  const file = filesStorage.get(fileId);
+
+  if (!file) {
+    return res.status(404).send('File not found or expired');
+  }
+
+  res.setHeader('Content-Type', file.type);
+  res.setHeader('Content-Disposition', `inline; filename="${file.name}"`);
+  res.send(file.buffer);
 });
 
 // Helper function to update room user count

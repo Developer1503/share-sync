@@ -294,11 +294,8 @@ async function copyToClipboard(text) {
     }
 }
 
-// Add message to UI (Replaces current message)
+// Add message to UI
 function addMessage(message, timestamp, fileData = null) {
-    // Clear container completely to only show ONE item
-    messagesContainer.innerHTML = '';
-
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message active-display';
 
@@ -308,6 +305,8 @@ function addMessage(message, timestamp, fileData = null) {
     if (fileData) {
         const fileIcon = getFileIcon(fileData.type);
         const isImage = fileData.type.startsWith('image/');
+        const isAudio = fileData.type.startsWith('audio/');
+        const isVideo = fileData.type.startsWith('video/');
 
         contentHtml = `
             <div class="file-attachment">
@@ -317,10 +316,22 @@ function addMessage(message, timestamp, fileData = null) {
                     <div class="file-meta">${formatFileSize(fileData.size)} • ${fileData.type}</div>
                     ${isImage ? `
                         <div class="file-preview">
-                            <img src="${fileData.data}" alt="${escapeHtml(fileData.name)}">
+                            <img src="${fileData.dataUrl || fileData.data}" alt="${escapeHtml(fileData.name)}">
                         </div>
                     ` : ''}
-                    <a href="${fileData.data}" download="${escapeHtml(fileData.name)}" class="btn-download">
+                    ${isAudio ? `
+                        <audio controls class="file-audio" style="width: 100%; margin-top: 8px;">
+                            <source src="${fileData.dataUrl || fileData.data}" type="${fileData.type}">
+                            Your browser does not support the audio element.
+                        </audio>
+                    ` : ''}
+                    ${isVideo ? `
+                        <video controls class="file-video" style="max-width: 100%; border-radius: 8px; margin-top: 8px;">
+                            <source src="${fileData.dataUrl || fileData.data}" type="${fileData.type}">
+                            Your browser does not support the video element.
+                        </video>
+                    ` : ''}
+                    <a href="${fileData.dataUrl || fileData.data}" download="${escapeHtml(fileData.name)}" class="btn-download">
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -350,7 +361,7 @@ function addMessage(message, timestamp, fileData = null) {
     <div class="message-content">
       ${contentHtml}
       <div class="message-footer">
-        <span class="message-time">Last updated: ${formatTime(timestamp)}</span>
+        <span class="message-time">${formatTime(timestamp)}</span>
         ${!fileData ? `
         <button class="btn-copy" onclick="copyMessage(this)">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -365,6 +376,9 @@ function addMessage(message, timestamp, fileData = null) {
   `;
 
     messagesContainer.appendChild(messageDiv);
+    
+    // Auto scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 
@@ -516,13 +530,14 @@ attachBtn.addEventListener('click', () => {
 });
 
 fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-        showToast('⚠ File too large. Maximum size is 10MB');
+    // Validate overall size limit (100MB Total via form-data)
+    const maxSize = 100 * 1024 * 1024;
+    const totalSize = files.reduce((acc, file) => acc + file.size, 0);
+    if (totalSize > maxSize) {
+        showToast('⚠ Total files exceed 100MB limit');
         fileInput.value = '';
         return;
     }
@@ -534,40 +549,54 @@ fileInput.addEventListener('change', async (e) => {
     }
 
     try {
-        showToast('📤 Uploading file...');
+        if (files.length === 1) {
+             showToast('📤 Uploading file...');
+        } else {
+             showToast(`📤 Uploading ${files.length} files...`);
+        }
 
-        // Read file as base64
-        const reader = new FileReader();
-        reader.onload = function (event) {
+        const formData = new FormData();
+        formData.append('roomCode', currentRoom);
+        files.forEach(file => formData.append('files', file));
+
+        const uploadUrl = window.location.protocol === 'file:' 
+            ? 'http://localhost:3000/upload'
+            : '/upload';
+
+        const response = await fetch(uploadUrl, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Upload failed');
+        
+        const result = await response.json();
+        const timestamp = Date.now();
+        
+        const downloadBaseUrl = window.location.protocol === 'file:' 
+            ? 'http://localhost:3000/download/'
+            : '/download/';
+        
+        // Let other clients know and we will get the broadcast too
+        result.files.forEach(fileMeta => {
             const fileData = {
-                name: file.name,
-                type: file.type,
-                size: file.size,
-                data: event.target.result
+                 name: fileMeta.name,
+                 type: fileMeta.type,
+                 size: fileMeta.size,
+                 dataUrl: downloadBaseUrl + fileMeta.fileId
             };
-
-            const timestamp = Date.now();
-
-            console.log('📤 Sending file to room:', currentRoom, '| File:', file.name);
-
-            socket.emit('send-file', {
-                roomCode: currentRoom,
-                fileData: fileData,
-                timestamp: timestamp
+            socket.emit('send-file-metadata', {
+                 roomCode: currentRoom,
+                 fileData: fileData,
+                 timestamp: timestamp
             });
-
-            fileInput.value = '';
-        };
-
-        reader.onerror = function () {
-            showToast('✗ Failed to read file');
-            fileInput.value = '';
-        };
-
-        reader.readAsDataURL(file);
+        });
+        
+        fileInput.value = '';
+        showToast('✅ Upload complete!');
     } catch (error) {
-        console.error('Error uploading file:', error);
-        showToast('✗ Failed to upload file');
+        console.error('Error uploading files:', error);
+        showToast('✗ Failed to upload files');
         fileInput.value = '';
     }
 });
@@ -608,20 +637,34 @@ leaveRoomBtn.addEventListener('click', () => {
 });
 
 // Socket event listeners
-socket.on('room-joined', ({ roomCode, currentData }) => {
+socket.on('room-joined', ({ roomCode, messages }) => {
     console.log('✅ Successfully joined room:', roomCode);
     currentRoomCode.textContent = roomCode;
+    // Clear old messages and initialize UI
+    messagesContainer.innerHTML = '';
     showScreen(chatScreen);
     messageInput.focus();
     showToast('✓ Joined room: ' + roomCode);
 
-    // If there's already data in the room, show it
-    if (currentData) {
-        if (currentData.fileData) {
-            addMessage('', currentData.timestamp, currentData.fileData);
-        } else {
-            addMessage(currentData.message, currentData.timestamp);
-        }
+    // Render message history
+    if (messages && messages.length > 0) {
+        messages.forEach(msg => {
+            if (msg.type === 'file' || msg.fileData) {
+                addMessage('', msg.timestamp, msg.fileData);
+            } else {
+                addMessage(msg.message, msg.timestamp);
+            }
+        });
+    } else {
+    	messagesContainer.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p>No messages yet</p>
+          <span>Send a message to get started</span>
+        </div>
+      `;
     }
 });
 
